@@ -1,0 +1,370 @@
+---
+- name: test out proxy settings for Windows modules
+  hosts: TEST
+  gather_facts: no
+  vars:
+    ansible_user: '{{ domain_username }}@{{ domain_realm | upper }}'
+    ansible_password: '{{ domain_password }}'
+    ansible_host: test.{{ domain_realm }}
+    ansible_become_user: '{{ ansible_user }}'
+    ansible_become_pass: '{{ ansible_password }}'
+    ansible_become_method: runas
+    proxy_host: squid.{{ domain_realm }}
+  tasks:
+  - name: make sure no proxy is explicitly set
+    win_inet_proxy:
+      auto_detect: yes
+
+  - name: connect to IIS site with Windows auth no creds
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      status_code: 401  # Authorisation requires
+
+  - name: connect to IIS site with Windows auth explicit creds
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      url_username: '{{ ansible_user }}'
+      url_password: '{{ ansible_password }}'
+
+  - name: connect to IIS site with Windows auth implicit creds (ntlm FAIL)
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      use_default_credential: yes
+      status_code: 401
+    vars:
+      ansible_winrm_transport: ntlm
+
+  - name: connect to IIS site with Windows auth implicit creds (kerberos without FAIL)
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      use_default_credential: yes
+      status_code: 401
+    vars:
+      ansible_winrm_transport: kerberos
+      ansible_winrm_kerberos_delegation: no
+
+  - name: connect to IIS site with Windows auth implicit creds (kerberos with delegation)
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      use_default_credential: yes
+    vars:
+      ansible_winrm_transport: kerberos
+      ansible_winrm_kerberos_delegation: yes
+
+  - name: connect to IIS site with Windows auth implicit creds (credssp)
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      use_default_credential: yes
+    vars:
+      ansible_winrm_transport: credssp
+
+  - name: connect to IIS site with Windows auth implicit creds (become)
+    win_uri:
+      url: http://iis.{{ domain_realm }}
+      use_default_credential: yes
+    become: yes
+
+  - name: connect with proxy no auth
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3129'
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: fail to connect with basic auth without creds
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3130'
+      status_code: 407  # ProxyAuthorisation
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with basic auth with creds
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3130'
+      proxy_username: '{{ proxy_username }}'
+      proxy_password: '{{ proxy_password }}'
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with basic auth over LDAP with creds
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3131'
+      proxy_username: '{{ domain_username }}'
+      proxy_password: '{{ domain_password }}'
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: verify that proxy default creds don't work over basic auth (doc validation)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3131'
+      proxy_use_default_credential: yes
+      status_code: 407
+    become: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth with explicit creds
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      proxy_username: '{{ ansible_user }}'
+      proxy_password: '{{ ansible_password }}'
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth with implicit creds (ntlm FAIL)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      proxy_use_default_credential: yes
+      status_code: 407
+    vars:
+      ansible_winrm_transport: ntlm
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth with implicit creds (kerberos without delegation FAIL)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      proxy_use_default_credential: yes
+      status_code: 407
+    vars:
+      ansible_winrm_transport: kerberos
+      ansible_winrm_kerberos_delegation: no
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth with implicit creds (kerberos with delegation)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      proxy_use_default_credential: yes
+    vars:
+      ansible_winrm_transport: kerberos
+      ansible_winrm_kerberos_delegation: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth with implicit creds (credssp)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      proxy_use_default_credential: yes
+    vars:
+      ansible_winrm_transport: credssp
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth with implicit creds (become)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      proxy_use_default_credential: yes
+    become: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with kerb auth without proxy_use_cred (FAIL)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_url: '{{ proxy_host }}:3132'
+      status_code: 407
+    become: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: set proxy to no auth proxy
+    win_inet_proxy:
+      proxy: '{{ proxy_host }}:3129'
+
+  - name: make sure use_proxy can override WInet proxy
+    win_uri:
+      url: http://httpbin.org/get
+      use_proxy: no
+    register: res
+
+  - assert:
+      that:
+      - not res.visa is defined
+
+  - name: connect with implicit no auth proxy
+    win_uri:
+      url: http://httpbin.org/get
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: set proxy to basic auth proxy
+    win_inet_proxy:
+      proxy: '{{ proxy_host }}:3130'
+
+  - name: connect with implicit basic auth proxy no creds FAIL
+    win_uri:
+      url: http://httpbin.org/get
+      status_code: 407
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit basic basic proxy with creds
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_username: '{{ proxy_username }}'
+      proxy_password: '{{ proxy_password }}'
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: set proxy to ldap proxy
+    win_inet_proxy:
+      proxy: '{{ proxy_host }}:3131'
+
+  - name: connect with implicit ldap proxy no creds FAIL
+    win_uri:
+      url: http://httpbin.org/get
+      status_code: 407
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit ldap proxy with creds
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_username: '{{ domain_username }}'
+      proxy_password: '{{ domain_password }}'
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: set proxy to kerb proxy
+    win_inet_proxy:
+      proxy: '{{ proxy_host }}:3132'
+
+  - name: connect with implicit kerb proxy no creds FAIL
+    win_uri:
+      url: http://httpbin.org/get
+      status_code: 407
+    become: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit kerb proxy with default cred (ntlm FAIL)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_use_default_credential: yes
+      status_code: 407
+    vars:
+      ansible_winrm_transport: ntlm
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit kerb proxy with default cred (kerberos without delegation FAIL)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_use_default_credential: yes
+      status_code: 407
+    vars:
+      ansible_winrm_transport: kerberos
+      ansible_winrm_kerberos_delegation: no
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit kerb proxy with default cred (kerberos with delegation)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_use_default_credential: yes
+    vars:
+      ansible_winrm_transport: kerberos
+      ansible_winrm_kerberos_delegation: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit kerb proxy with default cred (credssp)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_use_default_credential: yes
+    vars:
+      ansible_winrm_transport: credssp
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: connect with implicit kerb proxy with default cred (become)
+    win_uri:
+      url: http://httpbin.org/get
+      proxy_use_default_credential: yes
+    become: yes
+    register: res
+
+  - assert:
+      that:
+      - '"SQUID" in res.via'
+
+  - name: make sure no proxy is explicitly set at the end of the tests
+    win_inet_proxy:
+      auto_detect: yes

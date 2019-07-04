@@ -1,0 +1,33 @@
+all:
+  children:
+    windows:
+      hosts:
+        DC:
+          ansible_host: 192.168.10.10
+          vagrant_box: jborean93/WindowsServer2019
+        IIS:
+          ansible_host: 192.168.10.11
+          vagrant_box: jborean93/WindowsServer2019
+        TEST:
+          ansible_host: 192.168.10.12
+          vagrant_box: jborean93/WindowsServer2019
+      vars:
+        ansible_port: 5985
+        ansible_connection: winrm
+        ansible_winrm_transport: ntlm
+    linux:
+      hosts:
+        SQUID:
+          ansible_host: 192.168.10.20
+          vagrant_box: centos/7
+        ANSIBLE:
+          ansible_host: 192.168.10.21
+          vagrant_box: centos/7
+  vars:
+    ansible_user: vagrant
+    ansible_password: vagrant
+    proxy_username: proxy_username
+    proxy_password: proxy_password
+    domain_username: vagrant-domain
+    domain_password: VagrantPass1
+    domain_realm: ansible.proxy

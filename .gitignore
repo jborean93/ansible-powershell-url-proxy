@@ -1,0 +1,3 @@
+.vagrant/
+proxy.keytab
+tests.retry
