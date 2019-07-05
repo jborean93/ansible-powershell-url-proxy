@@ -1,0 +1,108 @@
+---
+- name: create TLS keys for testing
+  hosts: localhost
+  gather_facts: no
+  tasks:
+  - name: clear out test dir
+    file:
+      path: '{{ playbook_dir }}/cert'
+      state: '{{ item }}'
+    with_items:
+    #- absent
+    - directory
+
+  - name: create private keys
+    openssl_privatekey:
+      path: '{{ playbook_dir }}/cert/{{ item }}.key'
+      passphrase: '{{ cert_password }}'
+      cipher: aes256
+      size: 4096
+      type: RSA
+      state: present
+    with_items:
+    - ca
+    - site
+    - client
+
+  - name: create CA signing request
+    openssl_csr:
+      basic_constraints:
+      - CA:TRUE
+      basic_constraints_critical: yes
+      common_name: DC-CA
+      privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      privatekey_passphrase: '{{ cert_password }}'
+      path: '{{ playbook_dir }}/cert/ca.csr'
+      state: present
+
+  - name: create CA cert
+    openssl_certificate:
+      csr_path: '{{ playbook_dir }}/cert/ca.csr'
+      privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      privatekey_passphrase: '{{ cert_password }}'
+      path: '{{ playbook_dir }}/cert/ca.pem'
+      provider: selfsigned
+      state: present
+
+  - name: create site signing request
+    openssl_csr:
+      common_name: IIS
+      privatekey_path: '{{ playbook_dir }}/cert/site.key'
+      privatekey_passphrase: '{{ cert_password }}'
+      subject_alt_name:
+      - DNS:iis.{{ domain_realm }}
+      path: '{{ playbook_dir }}/cert/site.csr'
+      state: present
+
+  - name: create site cert
+    openssl_certificate:
+      csr_path: '{{ playbook_dir }}/cert/site.csr'
+      path: '{{ playbook_dir }}/cert/site.pem'
+      ownca_path: '{{ playbook_dir }}/cert/ca.pem'
+      ownca_privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      ownca_privatekey_passphrase: '{{ cert_password }}'
+      provider: ownca
+      state: present
+
+  - name: generate PKCS#12 file for site cert and key
+    openssl_pkcs12:
+      action: export
+      friendly_name: IIS
+      privatekey_path: '{{ playbook_dir }}/cert/site.key'
+      privatekey_passphrase: '{{ cert_password }}'
+      certificate_path: '{{ playbook_dir }}/cert/site.pem'
+      passphrase: '{{ cert_password }}'
+      path: '{{ playbook_dir }}/cert/site.pfx'
+      state: present
+
+  - name: create CSR for TLS client auth
+    openssl_csr:
+      common_name: '{{ hostvars["IIS"]["ansible_user"] }}'
+      extended_key_usage:
+      - TLS Web Client Authentication
+      use_common_name_for_san: no
+      privatekey_path: '{{ playbook_dir }}/cert/client.key'
+      privatekey_passphrase: '{{ cert_password }}'
+      path: '{{ playbook_dir }}/cert/client.csr'
+      state: present
+
+  - name: create cert for TLS client auth
+    openssl_certificate:
+      csr_path: '{{ playbook_dir }}/cert/client.csr'
+      path: '{{ playbook_dir }}/cert/client.pem'
+      ownca_path: '{{ playbook_dir }}/cert/ca.pem'
+      ownca_privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      ownca_privatekey_passphrase: '{{ cert_password }}'
+      provider: ownca
+      state: present
+
+  - name: generate PKCS#12 file for client cert and key
+    openssl_pkcs12:
+      action: export
+      friendly_name: Client Auth
+      privatekey_path: '{{ playbook_dir }}/cert/client.key'
+      privatekey_passphrase: '{{ cert_password }}'
+      certificate_path: '{{ playbook_dir }}/cert/client.pem'
+      passphrase: '{{ cert_password }}'
+      path: '{{ playbook_dir }}/cert/client.pfx'
+      state: present

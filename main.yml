@@ -132,21 +132,7 @@
     win_reboot:
     when: iis_install.reboot_required
 
-  - name: enable Windows auth and disable Anonymous auth
-    win_shell: |
-      $site = "IIS:\Sites"
-      $auth = "System.WebServer/Security/Authentication"
-
-      if (-not (Get-WebConfiguration -PSPath $site -Filter "$auth/WindowsAuthentication").Enabled) {
-          Set-WebConfigurationProperty -PSPath $site -Filter "$auth/WindowsAuthentication" -Name Enabled -Value True
-          "changed"
-      }
-      if ((Get-WebConfiguration -PSPath $site -Filter "$auth/AnonymousAuthentication").Enabled) {
-          Set-WebConfigurationProperty -PSPath $site -Filter "$auth/AnonymousAuthentication" -Name Enabled -Value False
-          "changed"
-      }
-    register: auth_res
-    changed_when: '"changed" in auth_res.stdout'
+  # TODO: Disable Anon auth and enable Windows auth
 
 - name: setup Kerberos config on linux hosts
   hosts: linux

@@ -47,3 +47,7 @@ Running `vagrant up` will setup the following hosts;
     * `3131`: Basic auth with domain credentials backed by LDAP
     * `3132`: Kerberos auth
 * Centos 7 host to run the actual Ansible tests on
+
+# TODO
+
+* Integration TLS Client auth into tests, you can use `cert.yml` to generate the certs required

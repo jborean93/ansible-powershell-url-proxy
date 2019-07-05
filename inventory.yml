@@ -31,3 +31,4 @@ all:
     domain_username: vagrant-domain
     domain_password: VagrantPass1
     domain_realm: ansible.proxy
+    cert_password: password
